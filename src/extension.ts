@@ -5,11 +5,17 @@ import {
   ProblemContentProvider,
   ROSALIND_SCHEME
 } from './providers/problemContentProvider';
-import { registerLoginCommand } from './commands/login';
+import {
+  registerSignInCommand,
+  registerSignOutCommand,
+  refreshSignedInContext,
+  SIGNED_IN_CONTEXT
+} from './commands/signIn';
 import { registerCreateAccountCommand } from './commands/createAccount';
 import { registerOpenProblemCommand } from './commands/openProblem';
 import { registerStartTimerCommand } from './commands/startTimer';
 import { registerSubmitSolutionCommand } from './commands/submitSolution';
+import { ActionsTreeProvider } from './views/actionsView';
 
 let clientRef: RosalindClient | undefined;
 let secretsRef: vscode.SecretStorage | undefined;
@@ -22,10 +28,23 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   clientRef = client;
 
   const provider = new ProblemContentProvider();
+  const actionsView = new ActionsTreeProvider();
+
+  const refreshActions = async () => {
+    const signedIn = await refreshSignedInContext(client);
+    actionsView.setSignedIn(signedIn);
+  };
+
+  // Initial state — fire-and-forget so activation isn't blocked on a network call.
+  void refreshActions();
+
   context.subscriptions.push(
     vscode.workspace.registerTextDocumentContentProvider(ROSALIND_SCHEME, provider),
     provider,
-    registerLoginCommand(context, client),
+    vscode.window.registerTreeDataProvider('rosalind.actions', actionsView),
+    actionsView,
+    registerSignInCommand(context, client, () => void refreshActions()),
+    registerSignOutCommand(context, client, () => void refreshActions()),
     registerCreateAccountCommand(),
     registerOpenProblemCommand(client, provider),
     registerStartTimerCommand(context, client),
@@ -42,3 +61,6 @@ export async function deactivate(): Promise<void> {
     }
   }
 }
+
+// Re-export so other modules can read the context key name.
+export { SIGNED_IN_CONTEXT };

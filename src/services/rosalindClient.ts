@@ -85,7 +85,19 @@ export class RosalindClient {
   async isLoggedIn(): Promise<boolean> {
     const resp = await this.http.get('/');
     const html: string = typeof resp.data === 'string' ? resp.data : '';
-    return /\/users\/profile\/|\/accounts\/logout\//.test(html);
+    return /\/accounts\/logout\//.test(html);
+  }
+
+  /**
+   * Inject a sessionid cookie obtained from the user's browser. Lets users who
+   * sign in via Google / OpenID skip the password-form flow entirely.
+   */
+  async setSessionCookie(sessionid: string): Promise<void> {
+    const tenYears = 60 * 60 * 24 * 365 * 10;
+    const cookieString =
+      `sessionid=${sessionid.trim()}; Path=/; Domain=rosalind.info; ` +
+      `HttpOnly; Max-Age=${tenYears}`;
+    await this.jar.setCookie(cookieString, BASE_URL);
   }
 
   async getProblem(slug: string): Promise<string> {

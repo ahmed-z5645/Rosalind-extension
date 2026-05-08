@@ -11,18 +11,33 @@
     "Other"
   ],
   "main": "./dist/extension.js",
-  "activationEvents": [
-    "onCommand:rosalind.login",
-    "onCommand:rosalind.createAccount",
-    "onCommand:rosalind.openProblem",
-    "onCommand:rosalind.startTimer",
-    "onCommand:rosalind.submitSolution"
-  ],
+  "activationEvents": [],
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "rosalind",
+          "title": "Rosalind",
+          "icon": "resources/dna.svg"
+        }
+      ]
+    },
+    "views": {
+      "rosalind": [
+        {
+          "id": "rosalind.actions",
+          "name": "Rosalind"
+        }
+      ]
+    },
     "commands": [
       {
-        "command": "rosalind.login",
-        "title": "Rosalind: Login"
+        "command": "rosalind.signIn",
+        "title": "Rosalind: Sign In with Browser"
+      },
+      {
+        "command": "rosalind.signOut",
+        "title": "Rosalind: Sign Out"
       },
       {
         "command": "rosalind.createAccount",
@@ -52,11 +67,13 @@
     "axios": "^1.7.7",
     "axios-cookiejar-support": "^5.0.5",
     "cheerio": "^1.0.0",
+    "sql.js": "^1.11.0",
     "tough-cookie": "^5.0.0",
     "turndown": "^7.2.0"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
+    "@types/sql.js": "^1.4.9",
     "@types/turndown": "^5.0.5",
     "@types/vscode": "^1.85.0",
     "esbuild": "^0.24.0",

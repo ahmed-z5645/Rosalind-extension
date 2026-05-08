@@ -11,7 +11,8 @@ const buildOptions = {
   platform: 'node',
   target: 'node18',
   sourcemap: true,
-  logLevel: 'info'
+  logLevel: 'info',
+  loader: { '.wasm': 'binary' }
 };
 
 async function run() {
