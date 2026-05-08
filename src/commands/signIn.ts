@@ -53,9 +53,18 @@ export function registerSignInCommand(
         const message = err instanceof Error ? err.message : String(err);
         const proceed = await vscode.window.showWarningMessage(
           `Rosalind: ${message}`,
-          { modal: true, detail: 'Open Rosalind in your browser and sign in, then try again?' },
-          'Open Rosalind'
+          {
+            modal: true,
+            detail:
+              'Open Rosalind in your browser and sign in, then try again — or use the Safari fallback to paste your session key.'
+          },
+          'Open Rosalind',
+          'Paste Session Key'
         );
+        if (proceed === 'Paste Session Key') {
+          await vscode.commands.executeCommand('rosalind.pasteSessionKey');
+          return;
+        }
         if (proceed !== 'Open Rosalind') return;
       }
 
@@ -79,9 +88,13 @@ export function registerSignInCommand(
           async () => attemptCapture(client)
         );
         if (!result) {
-          void vscode.window.showErrorMessage(
-            'Rosalind: signed-in cookie not found. Make sure you completed the sign-in in the browser tab that opened.'
+          const choice = await vscode.window.showErrorMessage(
+            'Rosalind: signed-in cookie not found. Make sure you completed the sign-in in the browser tab that opened.',
+            'Paste Session Key'
           );
+          if (choice === 'Paste Session Key') {
+            await vscode.commands.executeCommand('rosalind.pasteSessionKey');
+          }
           return;
         }
 

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { RosalindClient } from './services/rosalindClient';
 import { loadJar, saveJar } from './services/session';
+import { initLogger } from './services/logger';
 import {
   ProblemContentProvider,
   ROSALIND_SCHEME
@@ -11,6 +12,7 @@ import {
   refreshSignedInContext,
   SIGNED_IN_CONTEXT
 } from './commands/signIn';
+import { registerPasteSessionKeyCommand } from './commands/pasteSessionKey';
 import { registerCreateAccountCommand } from './commands/createAccount';
 import { registerOpenProblemCommand } from './commands/openProblem';
 import { registerStartTimerCommand } from './commands/startTimer';
@@ -22,6 +24,8 @@ let secretsRef: vscode.SecretStorage | undefined;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   secretsRef = context.secrets;
+  const channel = initLogger();
+  context.subscriptions.push(channel);
 
   const jar = await loadJar(context.secrets);
   const client = new RosalindClient(jar);
@@ -44,6 +48,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.window.registerTreeDataProvider('rosalind.actions', actionsView),
     actionsView,
     registerSignInCommand(context, client, () => void refreshActions()),
+    registerPasteSessionKeyCommand(context, client, () => void refreshActions()),
     registerSignOutCommand(context, client, () => void refreshActions()),
     registerCreateAccountCommand(),
     registerOpenProblemCommand(client, provider),

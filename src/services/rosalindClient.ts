@@ -1,7 +1,7 @@
-import axios, { AxiosInstance } from 'axios';
-import { wrapper } from 'axios-cookiejar-support';
+import axios, { AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 import { CookieJar } from 'tough-cookie';
 import * as cheerio from 'cheerio';
+import { log } from './logger';
 
 const BASE_URL = 'https://rosalind.info';
 const USER_AGENT =
@@ -23,19 +23,52 @@ export class RosalindClient {
   private http: AxiosInstance;
 
   constructor(public readonly jar: CookieJar) {
-    this.http = wrapper(
-      axios.create({
-        baseURL: BASE_URL,
-        jar,
-        withCredentials: true,
-        maxRedirects: 5,
-        headers: {
-          'User-Agent': USER_AGENT,
-          'Accept-Language': 'en-US,en;q=0.9'
-        },
-        validateStatus: (status) => status >= 200 && status < 400
-      })
-    );
+    this.http = axios.create({
+      baseURL: BASE_URL,
+      maxRedirects: 5,
+      headers: {
+        'User-Agent': USER_AGENT,
+        'Accept-Language': 'en-US,en;q=0.9'
+      },
+      // Force axios to follow redirects to a 2xx — if we treat 3xx as
+      // success, axios resolves on the 302 with an empty body.
+      validateStatus: (status) => status >= 200 && status < 300
+    });
+
+    // axios-cookiejar-support@5 doesn't speak tough-cookie@5; pump cookies
+    // through the jar manually instead.
+    this.http.interceptors.request.use(async (config) => {
+      const url = new URL(
+        config.url || '/',
+        config.baseURL || BASE_URL
+      ).toString();
+      const cookieString = await jar.getCookieString(url);
+      if (cookieString) {
+        const headers =
+          config.headers ?? ({} as InternalAxiosRequestConfig['headers']);
+        (headers as Record<string, string>)['Cookie'] = cookieString;
+        config.headers = headers;
+      }
+      return config;
+    });
+
+    this.http.interceptors.response.use(async (response) => {
+      const setCookie = response.headers['set-cookie'];
+      if (Array.isArray(setCookie) && setCookie.length > 0) {
+        const respUrl = new URL(
+          response.config.url || '/',
+          response.config.baseURL || BASE_URL
+        ).toString();
+        for (const sc of setCookie) {
+          try {
+            await jar.setCookie(sc, respUrl);
+          } catch {
+            /* ignore parse errors */
+          }
+        }
+      }
+      return response;
+    });
   }
 
   private async getCsrfToken(path: string): Promise<string> {
@@ -83,9 +116,34 @@ export class RosalindClient {
   }
 
   async isLoggedIn(): Promise<boolean> {
-    const resp = await this.http.get('/');
+    // /problems/list-view/ is a stable 200 (no redirects) for both anon and
+    // authed users. Anon shows id="menu_login"; authed shows id="menu_profile".
+    const url = '/problems/list-view/';
+    const cookiesForUrl = await this.jar.getCookies('https://rosalind.info' + url);
+    log(
+      'isLoggedIn: GET',
+      url,
+      'jar cookies:',
+      cookiesForUrl.map((c) => `${c.key}=${c.value.slice(0, 6)}…(${c.value.length})`).join(', ') || '(none)'
+    );
+    const resp = await this.http.get(url);
     const html: string = typeof resp.data === 'string' ? resp.data : '';
-    return /\/accounts\/logout\//.test(html);
+    const hasMenuLogin = /id="menu_login"/i.test(html);
+    const hasMenuProfile = /id="menu_profile"/i.test(html);
+    log(
+      'isLoggedIn: status',
+      resp.status,
+      'bodyLen',
+      html.length,
+      'hasMenuLogin',
+      hasMenuLogin,
+      'hasMenuProfile',
+      hasMenuProfile,
+      'requestSentCookie',
+      (resp.config?.headers as Record<string, unknown> | undefined)?.['Cookie'] ?? resp.request?._header?.match?.(/Cookie:[^\r\n]*/)?.[0] ?? '(unknown)'
+    );
+    if (html.length === 0) return false;
+    return !hasMenuLogin;
   }
 
   /**
@@ -94,10 +152,16 @@ export class RosalindClient {
    */
   async setSessionCookie(sessionid: string): Promise<void> {
     const tenYears = 60 * 60 * 24 * 365 * 10;
-    const cookieString =
-      `sessionid=${sessionid.trim()}; Path=/; Domain=rosalind.info; ` +
-      `HttpOnly; Max-Age=${tenYears}`;
-    await this.jar.setCookie(cookieString, BASE_URL);
+    const cookieString = `sessionid=${sessionid.trim()}; Path=/; Max-Age=${tenYears}`;
+    const cookie = await this.jar.setCookie(cookieString, BASE_URL);
+    log(
+      'setSessionCookie: stored',
+      cookie ? `${cookie.key}=${cookie.value.slice(0, 6)}…(${cookie.value.length})` : '(null)',
+      'domain:',
+      cookie?.domain,
+      'path:',
+      cookie?.path
+    );
   }
 
   async getProblem(slug: string): Promise<string> {

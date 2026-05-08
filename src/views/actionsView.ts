@@ -14,9 +14,17 @@ const ACTIONS: ActionDef[] = [
   {
     id: 'signIn',
     label: 'Sign In with Browser',
-    description: 'Opens Rosalind in your default browser',
+    description: 'Auto: Chrome, Brave, Edge, Arc, Vivaldi, Opera',
     command: 'rosalind.signIn',
     icon: 'sign-in',
+    whenSignedOut: true
+  },
+  {
+    id: 'pasteSessionKey',
+    label: 'Paste Session Key',
+    description: 'Safari fallback',
+    command: 'rosalind.pasteSessionKey',
+    icon: 'key',
     whenSignedOut: true
   },
   {

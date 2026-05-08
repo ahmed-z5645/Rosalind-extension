@@ -28,6 +28,7 @@ interface BrowserCandidate {
 }
 
 const HOME = os.homedir();
+const HOST_FILTER = 'rosalind.info';
 
 function macOSCandidates(): BrowserCandidate[] {
   const support = path.join(HOME, 'Library', 'Application Support');
@@ -99,6 +100,12 @@ async function sortByMTime(
   return withStat.map((w) => w.c);
 }
 
+interface ParsedCookie {
+  name: string;
+  value: string;
+  host: string;
+}
+
 function readKeychainPassword(service: string): string {
   const out = execFileSync(
     'security',
@@ -114,17 +121,19 @@ function deriveKey(password: string): Buffer {
 }
 
 function decryptValue(encrypted: Buffer, key: Buffer): string {
-  // Chromium stores values prefixed with a version tag like "v10" or "v11".
   if (encrypted.length === 0) return '';
-  const prefix = encrypted.slice(0, 3).toString('utf8');
+  const prefix = encrypted.subarray(0, 3).toString('utf8');
   const cipher =
-    prefix === 'v10' || prefix === 'v11' ? encrypted.slice(3) : encrypted;
-  const iv = Buffer.alloc(16, ' '); // 16 spaces
+    prefix === 'v10' || prefix === 'v11' ? encrypted.subarray(3) : encrypted;
+  const iv = Buffer.alloc(16, ' ');
   const decipher = crypto.createDecipheriv('aes-128-cbc', key, iv);
   decipher.setAutoPadding(true);
   const decrypted = Buffer.concat([decipher.update(cipher), decipher.final()]);
   // Modern Chrome (v118+) prepends a 32-byte SHA256 of the host. Strip if present.
-  if (decrypted.length > 32 && /^[A-Za-z0-9._-]/.test(decrypted.toString('utf8', 32, 33))) {
+  if (
+    decrypted.length > 32 &&
+    /^[A-Za-z0-9._-]/.test(decrypted.toString('utf8', 32, 33))
+  ) {
     return decrypted.toString('utf8', 32);
   }
   return decrypted.toString('utf8');
@@ -138,39 +147,47 @@ function loadSql(): Promise<SqlJsStatic> {
   return sqlPromise;
 }
 
-interface CookieRow {
-  name: string;
-  value: string;
-  encrypted_value: Uint8Array;
-  host_key: string;
-}
-
-async function readRowsFromCookieDb(
-  cookiePath: string
-): Promise<CookieRow[]> {
+async function readChromiumCookies(
+  candidate: BrowserCandidate
+): Promise<ParsedCookie[]> {
   const SQL = await loadSql();
-  // Copy to temp so we don't fight WAL locking on the live file.
   const tmp = path.join(os.tmpdir(), `rosalind-cookies-${Date.now()}.sqlite`);
-  await fs.copyFile(cookiePath, tmp);
+  await fs.copyFile(candidate.cookiePath, tmp);
+  const rawRows: Array<{
+    name: string;
+    value: string;
+    encrypted_value: Uint8Array;
+    host_key: string;
+  }> = [];
   try {
     const data = await fs.readFile(tmp);
     const db = new SQL.Database(data);
     const stmt = db.prepare(
       `SELECT name, value, encrypted_value, host_key
        FROM cookies
-       WHERE host_key LIKE '%rosalind.info'`
+       WHERE host_key LIKE '%${HOST_FILTER}'`
     );
-    const rows: CookieRow[] = [];
     while (stmt.step()) {
-      const row = stmt.getAsObject() as unknown as CookieRow;
-      rows.push(row);
+      rawRows.push(stmt.getAsObject() as unknown as (typeof rawRows)[number]);
     }
     stmt.free();
     db.close();
-    return rows;
   } finally {
     fs.unlink(tmp).catch(() => {});
   }
+  if (rawRows.length === 0) return [];
+
+  const password = readKeychainPassword(candidate.keychainService);
+  const key = deriveKey(password);
+
+  return rawRows.map((r) => ({
+    name: r.name,
+    value:
+      r.encrypted_value && r.encrypted_value.length > 0
+        ? decryptValue(Buffer.from(r.encrypted_value), key)
+        : r.value || '',
+    host: r.host_key
+  }));
 }
 
 export interface ExtractedSession {
@@ -189,28 +206,21 @@ export async function findRosalindSession(): Promise<ExtractedSession | null> {
   const candidates = await sortByMTime(macOSCandidates());
   if (candidates.length === 0) {
     throw new Error(
-      'No supported browser cookie store was found. Sign in with Chrome, Brave, Edge, Arc, Vivaldi, Opera, or Chromium.'
+      'No supported browser cookie store was found. Sign in with Chrome, Brave, Edge, Arc, Vivaldi, Opera, or Chromium — or use "Paste Session Key" (Safari fallback).'
     );
   }
 
   const errors: string[] = [];
   for (const candidate of candidates) {
     try {
-      const rows = await readRowsFromCookieDb(candidate.cookiePath);
-      if (rows.length === 0) continue;
-
-      const password = readKeychainPassword(candidate.keychainService);
-      const key = deriveKey(password);
+      const cookies = await readChromiumCookies(candidate);
+      if (cookies.length === 0) continue;
 
       let sessionid: string | undefined;
       let csrftoken: string | undefined;
-      for (const row of rows) {
-        const decrypted =
-          row.encrypted_value && row.encrypted_value.length > 0
-            ? decryptValue(Buffer.from(row.encrypted_value), key)
-            : row.value || '';
-        if (row.name === 'sessionid' && decrypted) sessionid = decrypted;
-        if (row.name === 'csrftoken' && decrypted) csrftoken = decrypted;
+      for (const c of cookies) {
+        if (c.name === 'sessionid' && c.value) sessionid = c.value;
+        if (c.name === 'csrftoken' && c.value) csrftoken = c.value;
       }
       if (sessionid) {
         return { sessionid, csrftoken, source: candidate.name };
