@@ -1,0 +1,65 @@
+{
+  "name": "rosalind-extension",
+  "displayName": "Rosalind",
+  "description": "Solve Rosalind.info computational biology problems from VS Code.",
+  "version": "0.1.0",
+  "publisher": "ahmed",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onCommand:rosalind.login",
+    "onCommand:rosalind.createAccount",
+    "onCommand:rosalind.openProblem",
+    "onCommand:rosalind.startTimer",
+    "onCommand:rosalind.submitSolution"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "rosalind.login",
+        "title": "Rosalind: Login"
+      },
+      {
+        "command": "rosalind.createAccount",
+        "title": "Rosalind: Create Account"
+      },
+      {
+        "command": "rosalind.openProblem",
+        "title": "Rosalind: Open Problem"
+      },
+      {
+        "command": "rosalind.startTimer",
+        "title": "Rosalind: Start Dataset Timer"
+      },
+      {
+        "command": "rosalind.submitSolution",
+        "title": "Rosalind: Submit Solution"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "vscode:prepublish": "npm run build",
+    "package": "vsce package"
+  },
+  "dependencies": {
+    "axios": "^1.7.7",
+    "axios-cookiejar-support": "^5.0.5",
+    "cheerio": "^1.0.0",
+    "tough-cookie": "^5.0.0",
+    "turndown": "^7.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/turndown": "^5.0.5",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.4.0"
+  }
+}
