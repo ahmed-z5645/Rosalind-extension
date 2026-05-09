@@ -26,7 +26,12 @@
       "rosalind": [
         {
           "id": "rosalind.actions",
-          "name": "Rosalind"
+          "name": "Actions"
+        },
+        {
+          "id": "rosalind.problem",
+          "name": "Problem",
+          "type": "webview"
         }
       ]
     },
@@ -70,11 +75,13 @@
   "dependencies": {
     "axios": "^1.7.7",
     "cheerio": "^1.0.0",
+    "katex": "^0.16.45",
     "sql.js": "^1.11.0",
     "tough-cookie": "^5.0.0",
     "turndown": "^7.2.0"
   },
   "devDependencies": {
+    "@types/katex": "^0.16.8",
     "@types/node": "^20.11.0",
     "@types/sql.js": "^1.4.9",
     "@types/turndown": "^5.0.5",
