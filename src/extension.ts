@@ -47,8 +47,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     registerSignOutCommand(context, client, () => void refreshActions()),
     registerCreateAccountCommand(),
     registerOpenProblemCommand(client, problemView),
-    registerStartTimerCommand(context, client),
-    registerSubmitSolutionCommand(client)
+    registerStartTimerCommand(context, client, problemView),
+    registerSubmitSolutionCommand(client, problemView)
   );
 }
 

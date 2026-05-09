@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as cheerio from 'cheerio';
 import katex from 'katex';
 
 const ROSALIND_ORIGIN = 'https://rosalind.info';
@@ -23,10 +24,36 @@ function renderMathInHtml(html: string): string {
   return out;
 }
 
-function absolutizeHtml(html: string): string {
-  return html
-    .replace(/href="(\/[^"]*)"/g, `href="${ROSALIND_ORIGIN}$1"`)
-    .replace(/src="(\/[^"]*)"/g, `src="${ROSALIND_ORIGIN}$1"`);
+/**
+ * Strip Rosalind's site-specific inline styles and layout classes so the
+ * webview styles govern appearance uniformly for both problem and bio panes.
+ */
+function normalizeHtml(html: string): string {
+  const $ = cheerio.load(html, { xmlMode: false }, false);
+
+  $('[style]').removeAttr('style');
+
+  // Remove classes that carry Rosalind's grey backgrounds / odd margins.
+  // Keep semantic ones (e.g. 'term', 'math') which we rely on.
+  const STRIP_CLASSES = /\b(panel|well|rounded|bg-\w+|alert[-\w]*|problem-statement[-\w]*|floatright|floatleft)\b/g;
+  $('[class]').each((_, el) => {
+    const cls = ($(el).attr('class') || '').replace(STRIP_CLASSES, '').trim();
+    if (cls) {
+      $(el).attr('class', cls);
+    } else {
+      $(el).removeAttr('class');
+    }
+  });
+
+  // Absolutize relative URLs.
+  $('a[href^="/"]').each((_, el) => {
+    $(el).attr('href', ROSALIND_ORIGIN + $(el).attr('href'));
+  });
+  $('img[src^="/"]').each((_, el) => {
+    $(el).attr('src', ROSALIND_ORIGIN + $(el).attr('src'));
+  });
+
+  return $.html();
 }
 
 function nonce(): string {
@@ -37,6 +64,7 @@ function nonce(): string {
 export class ProblemWebviewProvider implements vscode.WebviewViewProvider {
   static readonly viewId = 'rosalind.problem';
 
+  currentSlug: string | undefined;
   private _view?: vscode.WebviewView;
 
   constructor(private readonly _extensionUri: vscode.Uri) {}
@@ -54,7 +82,8 @@ export class ProblemWebviewProvider implements vscode.WebviewViewProvider {
     this._showPlaceholder();
   }
 
-  showProblem(title: string, problemHtml: string, bioHtml?: string): void {
+  showProblem(slug: string, title: string, problemHtml: string, bioHtml?: string): void {
+    this.currentSlug = slug;
     if (!this._view) return;
     this._view.show(true);
     this._view.webview.html = this._buildHtml(title, problemHtml, bioHtml);
@@ -78,8 +107,8 @@ export class ProblemWebviewProvider implements vscode.WebviewViewProvider {
     );
     const csp = webview.cspSource;
 
-    const problemContent = renderMathInHtml(absolutizeHtml(problemHtml));
-    const bioContent = bioHtml ? renderMathInHtml(absolutizeHtml(bioHtml)) : null;
+    const problemContent = renderMathInHtml(normalizeHtml(problemHtml));
+    const bioContent = bioHtml ? renderMathInHtml(normalizeHtml(bioHtml)) : null;
 
     const tabs = bioContent
       ? `<div class="tabs">
@@ -120,6 +149,10 @@ export class ProblemWebviewProvider implements vscode.WebviewViewProvider {
     .katex-display{overflow-x:auto;padding:4px 0;}
     table{border-collapse:collapse;margin:.75em 0;}
     td,th{border:1px solid var(--vscode-panel-border);padding:4px 8px;}
+    /* Neutralise any residual Rosalind container styling */
+    blockquote{background:transparent;border-left:3px solid var(--vscode-panel-border);margin:0.5em 0;padding:0 0 0 1em;}
+    div,section,aside,article{background:transparent;}
+    p{margin:.6em 0;}
   </style>
 </head>
 <body>

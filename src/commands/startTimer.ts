@@ -1,12 +1,13 @@
 import * as vscode from 'vscode';
 import { RosalindClient } from '../services/rosalindClient';
+import { pickProblem } from '../services/problemPicker';
 import { startDatasetTimer } from '../services/timer';
-
-const SLUG_RE = /^[a-z0-9]+$/;
+import { ProblemWebviewProvider } from '../views/problemView';
 
 export function registerStartTimerCommand(
   context: vscode.ExtensionContext,
-  client: RosalindClient
+  client: RosalindClient,
+  problemView: ProblemWebviewProvider
 ): vscode.Disposable {
   return vscode.commands.registerCommand('rosalind.startTimer', async () => {
     if (!vscode.workspace.workspaceFolders?.length) {
@@ -16,25 +17,17 @@ export function registerStartTimerCommand(
       return;
     }
 
-    const slug = await vscode.window.showInputBox({
-      prompt: 'Rosalind problem ID for the dataset',
-      ignoreFocusOut: true,
-      validateInput: (v) =>
-        SLUG_RE.test(v.trim())
-          ? null
-          : 'Use the lowercase URL slug (letters/digits only).'
-    });
+    const slug = problemView.currentSlug ?? await pickProblem(client);
     if (!slug) return;
-    const id = slug.trim();
 
     let dataset: string;
     try {
       dataset = await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Notification,
-          title: `Rosalind: downloading dataset for ${id}…`
+          title: `Rosalind: downloading dataset for ${slug}…`
         },
-        async () => client.getDataset(id)
+        async () => client.getDataset(slug)
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -42,18 +35,13 @@ export function registerStartTimerCommand(
       return;
     }
 
-    if (
-      dataset.includes('id_form_login') ||
-      /please log in/i.test(dataset)
-    ) {
-      void vscode.window.showErrorMessage(
-        'Rosalind: log in first (Rosalind: Login).'
-      );
+    if (dataset.includes('id_form_login') || /please log in/i.test(dataset)) {
+      void vscode.window.showErrorMessage('Rosalind: log in first.');
       return;
     }
 
     try {
-      const disposable = await startDatasetTimer(id, dataset);
+      const disposable = await startDatasetTimer(slug, dataset);
       context.subscriptions.push(disposable);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

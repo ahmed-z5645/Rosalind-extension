@@ -6,8 +6,8 @@ import {
   extractSubmissionForm,
   parseSubmissionResult
 } from '../services/scraper';
-
-const SLUG_RE = /^[a-z0-9]+$/;
+import { pickProblem } from '../services/problemPicker';
+import { ProblemWebviewProvider } from '../views/problemView';
 
 async function gatherOutput(): Promise<string | undefined> {
   const choice = await vscode.window.showQuickPick(
@@ -39,19 +39,12 @@ async function gatherOutput(): Promise<string | undefined> {
 }
 
 export function registerSubmitSolutionCommand(
-  client: RosalindClient
+  client: RosalindClient,
+  problemView: ProblemWebviewProvider
 ): vscode.Disposable {
   return vscode.commands.registerCommand('rosalind.submitSolution', async () => {
-    const slug = await vscode.window.showInputBox({
-      prompt: 'Rosalind problem ID to submit against',
-      ignoreFocusOut: true,
-      validateInput: (v) =>
-        SLUG_RE.test(v.trim())
-          ? null
-          : 'Use the lowercase URL slug (letters/digits only).'
-    });
+    const slug = problemView.currentSlug ?? await pickProblem(client);
     if (!slug) return;
-    const id = slug.trim();
 
     const output = await gatherOutput();
     if (output === undefined) return;
@@ -60,31 +53,27 @@ export function registerSubmitSolutionCommand(
       const responseHtml = await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Notification,
-          title: `Rosalind: submitting ${id}…`
+          title: `Rosalind: submitting ${slug}…`
         },
         async () => {
-          const problemHtml = await client.getProblem(id);
+          const problemHtml = await client.getProblem(slug);
           const $problem = cheerio.load(problemHtml);
-          const form = extractSubmissionForm($problem, id);
+          const form = extractSubmissionForm($problem, slug);
           if (!form) {
             throw new Error(
-              'Submission form not found. Are you logged in and is the slug correct?'
+              'Submission form not found. Are you logged in and is the problem correct?'
             );
           }
-          return client.submit(id, form, output);
+          return client.submit(slug, form, output);
         }
       );
 
       const $resp = cheerio.load(responseHtml);
       const result = parseSubmissionResult($resp);
       if (result.correct) {
-        void vscode.window.showInformationMessage(
-          `Rosalind ✅ ${result.message}`
-        );
+        void vscode.window.showInformationMessage(`Rosalind ✅ ${result.message}`);
       } else {
-        void vscode.window.showWarningMessage(
-          `Rosalind ❌ ${result.message}`
-        );
+        void vscode.window.showWarningMessage(`Rosalind ❌ ${result.message}`);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

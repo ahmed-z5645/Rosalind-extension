@@ -1,30 +1,30 @@
 import * as cheerio from 'cheerio';
 import type { SubmissionForm, SubmissionResult } from './rosalindClient';
 
-const BIO_HEADER_ID = 'a-rapid-introduction-to-molecular-biology';
 const PROBLEM_HEADER_ID = 'problem';
-const SAMPLE_DATASET_ID = 'sample-dataset';
 
-function htmlBetween(
-  $: cheerio.CheerioAPI,
-  fromId: string,
-  toId: string | null
-): string | null {
-  const start = $(`#${fromId}`).first();
-  if (start.length === 0) return null;
+export interface ProblemEntry {
+  slug: string;
+  title: string;
+}
 
-  const collected: string[] = [];
-  let node = start.next();
-  while (node.length > 0) {
-    if (toId && node.attr('id') === toId) break;
-    if (node.is('h2') && toId === null) {
-      // No explicit stop; bail at next h2 (defensive).
-      break;
-    }
-    collected.push($.html(node) || '');
-    node = node.next();
-  }
-  return collected.join('\n');
+export function extractProblemList($: cheerio.CheerioAPI): ProblemEntry[] {
+  const seen = new Set<string>();
+  const results: ProblemEntry[] = [];
+  const SKIP = new Set(['list-view', 'list', 'locations', 'datasets', 'leaderboard']);
+
+  $('a[href]').each((_, el) => {
+    const href = $(el).attr('href') || '';
+    const m = href.match(/^\/problems\/([a-z0-9]+)\/?$/);
+    if (!m) return;
+    const slug = m[1];
+    if (SKIP.has(slug) || seen.has(slug)) return;
+    const title = $(el).text().trim();
+    if (!title) return;
+    seen.add(slug);
+    results.push({ slug, title });
+  });
+  return results;
 }
 
 export function extractTitle($: cheerio.CheerioAPI): string {
@@ -46,7 +46,20 @@ export function extractProblemHtml($: cheerio.CheerioAPI): string | null {
 }
 
 export function extractBioContextHtml($: cheerio.CheerioAPI): string | null {
-  return htmlBetween($, BIO_HEADER_ID, PROBLEM_HEADER_ID);
+  // Collect every sibling node that comes BEFORE <h2 id="problem">.
+  // This works regardless of what the bio section's own H2 id is.
+  const problemHeader = $(`#${PROBLEM_HEADER_ID}`).first();
+  if (problemHeader.length === 0) return null;
+
+  const collected: string[] = [];
+  let node = problemHeader.prev();
+  while (node.length > 0) {
+    collected.unshift($.html(node) || '');
+    node = node.prev();
+  }
+
+  const joined = collected.join('\n').trim();
+  return joined.length > 0 ? joined : null;
 }
 
 export function extractSubmissionForm(

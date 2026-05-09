@@ -6,34 +6,25 @@ import {
   extractProblemHtml,
   extractTitle
 } from '../services/scraper';
+import { pickProblem } from '../services/problemPicker';
 import { ProblemWebviewProvider } from '../views/problemView';
-
-const SLUG_RE = /^[a-z0-9]+$/;
 
 export function registerOpenProblemCommand(
   client: RosalindClient,
   problemView: ProblemWebviewProvider
 ): vscode.Disposable {
   return vscode.commands.registerCommand('rosalind.openProblem', async () => {
-    const slug = await vscode.window.showInputBox({
-      prompt: 'Rosalind problem ID (e.g. dna, rna, revc)',
-      ignoreFocusOut: true,
-      validateInput: (v) =>
-        SLUG_RE.test(v.trim())
-          ? null
-          : 'Use the lowercase URL slug (letters/digits only).'
-    });
+    const slug = await pickProblem(client, problemView.currentSlug);
     if (!slug) return;
-    const id = slug.trim();
 
     let html: string;
     try {
       html = await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Notification,
-          title: `Rosalind: fetching ${id}…`
+          title: `Rosalind: fetching ${slug}…`
         },
-        async () => client.getProblem(id)
+        async () => client.getProblem(slug)
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -42,17 +33,17 @@ export function registerOpenProblemCommand(
     }
 
     const $ = cheerio.load(html);
-    const title = extractTitle($) || `Rosalind: ${id}`;
+    const title = extractTitle($) || slug;
     const problemHtml = extractProblemHtml($);
     const bioHtml = extractBioContextHtml($);
 
     if (!problemHtml) {
       void vscode.window.showErrorMessage(
-        `Rosalind: could not parse problem "${id}". Are you logged in?`
+        `Rosalind: could not parse problem "${slug}". Are you logged in?`
       );
       return;
     }
 
-    problemView.showProblem(title, problemHtml, bioHtml ?? undefined);
+    problemView.showProblem(slug, title, problemHtml, bioHtml ?? undefined);
   });
 }

@@ -164,6 +164,11 @@ export class RosalindClient {
     );
   }
 
+  async getProblemList(): Promise<string> {
+    const resp = await this.http.get('/problems/list-view/');
+    return resp.data as string;
+  }
+
   async getProblem(slug: string): Promise<string> {
     const resp = await this.http.get(`/problems/${slug}/`);
     return resp.data as string;
