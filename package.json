@@ -1,13 +1,27 @@
 {
   "name": "rosalind-extension",
-  "displayName": "Rosalind",
+  "displayName": "Rosalind Extension",
   "description": "Solve Rosalind.info computational biology problems from VS Code.",
   "version": "0.1.0",
-  "publisher": "ahmed",
+  "publisher": "ahmed-z5645",
+  "license": "MIT",
+  "icon": "resources/logo.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ahmed-z5645/rosalind-extension"
+  },
+  "keywords": [
+    "rosalind",
+    "bioinformatics",
+    "computational biology",
+    "biology",
+    "competitive programming"
+  ],
   "engines": {
     "vscode": "^1.85.0"
   },
   "categories": [
+    "Education",
     "Other"
   ],
   "main": "./dist/extension.js",

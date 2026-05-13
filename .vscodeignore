@@ -1,11 +1,12 @@
 .vscode/**
 .vscode-test/**
+.claude/**
 src/**
 node_modules/**
 .gitignore
 .eslintrc*
 tsconfig.json
 esbuild.js
-*.map
 *.ts
-!dist/**
+*.map
+dist/**/*.map
